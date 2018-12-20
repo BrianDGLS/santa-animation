@@ -1,189 +1,156 @@
-window.onload = () => init();
+//#region utils
+function clampNumber(num, a, b) {
+    return Math.max(Math.min(num, Math.max(a, b)), Math.min(a, b))
+}
+function randomInt(min, max) {
+    const lowerLimit = Math.ceil(min)
+    const upperLimit = Math.floor(max)
+    const range = upperLimit - lowerLimit + 1
+    return Math.floor(Math.random() * range) + lowerLimit
+}
+function sample(arr) {
+    const index = randomInt(0, arr.length - 1)
+    return arr[index]
+}
+function rectInScreen(screen, { x, y, width, height }) {
+    const xIn = x > 0 && x + width < screen.width
+    const yIn = y + height > 0 && y > screen.height
+    return !(xIn && yIn)
+}
+function getRect({ x = 0, y = 0, width = 0, height = 0 }) {
+    const initial = { x, y, width, height, vx: 0, vy: 0 }
+    return { ...initial, initial }
+}
+function getScreen({ width = 0, height = 0 }) {
+    return { width, height }
+}
+function getSanta(screen) {
+    const rect = getRect({
+        x: screen.width / 100,
+        y: screen.height / 2,
+        height: 72,
+        width: 120,
+    })
+    return { ...rect, speed: 4 }
+}
+function collisionDetected(rect1, rect2) {
+    return (
+        rect1.x < rect2.x + rect2.width &&
+        rect1.x + rect1.width > rect2.x &&
+        rect1.y < rect2.y + rect2.height &&
+        rect1.y + rect1.height > rect2.y
+    )
+}
+const presentImg = new Image()
+presentImg.src = './present1.png'
+const presentImg2 = new Image()
+presentImg2.src = './present2.png'
+const presentImg3 = new Image()
+presentImg3.src = './present3.png'
+function getPresentImage() {
+    return sample([presentImg, presentImg2, presentImg3])
+}
+function getPresent() {
+    const img = getPresentImage()
+    const rect = getRect({
+        x: randomInt(SCREEN.width, SCREEN.width * 2),
+        y: randomInt(0, SCREEN.height),
+        width: img.width,
+        height: img.height,
+    })
+    return { ...rect, speed: randomInt(2, 5), img }
+}
+//#endregion
 
-const $ = document.querySelector('canvas').getContext('2d');
+//#region keyboard
+const KEYS = {}
 
-const w = ($.canvas.width = window.innerWidth);
-const h = ($.canvas.height = window.innerHeight);
+window.addEventListener('keydown', keyDownHandler, false)
+window.addEventListener('keyup', keyUpHandler, false)
+function keyUpHandler({ key }) {
+    KEYS[key] = false
+}
+function keyDownHandler({ key }) {
+    KEYS[key] = true
+}
+//#endregion
 
-const GRAVITY = 0.125;
-const limit = 60;
-const snow = [];
-const presentLimit = 8;
-const presents = [];
-const presentImages = [...document.querySelectorAll('.present')];
-
-const sample = arr => arr[Math.floor(Math.random() * arr.length)];
-const randomInt = (min, max) => Math.random() * (max - min) + min;
-
-const inScreen = ({ x, y }) => x > 0 && x < w && y > 0 && y < h;
-
-const renderSnow = snow =>
-  snow.map(flake => {
-    $.save();
-    $.translate(flake.x, flake.y);
-    $.fillStyle = `rgba(255,255,255,${flake.alpha})`;
-    switch (flake.type) {
-      case 1:
-        $.fillRect(0, 0, 4, 4);
-        break;
-      case 2:
-        $.fillRect(-4, 0, 4, 4);
-        $.fillRect(0, -4, 4, 4);
-        $.fillRect(0, 4, 4, 4);
-        $.fillRect(4, 0, 4, 4);
-        break;
+//#region globals
+const CANVAS = document.getElementById('santa-game')
+const CTX = CANVAS.getContext('2d')
+const FRICTION = 0.97
+const SCREEN = getScreen({
+    width: (CANVAS.width = 640),
+    height: (CANVAS.height = 420),
+})
+const SANTA = getSanta(SCREEN)
+const PRESENTS = []
+const PRESENT_COUNT = 8
+function generatePresents() {
+    for (let i = 0; i < PRESENT_COUNT; ++i) {
+        PRESENTS.push(getPresent())
     }
-    $.restore();
-  });
-
-const updateSnow = snow =>
-  snow.map((flake, index) => {
-    flake.x = flake.dir
-      ? flake.x + Math.sin(flake.angle) * 0.6
-      : flake.x - Math.cos(flake.angle) * 0.6; //+= flake.vx;
-    flake.y += flake.vy;
-    flake.updateAlpha();
-    flake.angle += 0.01;
-    if (!inScreen(flake)) {
-      snow[index] = SnowFlakeFactory.randomSnowFlake();
-    }
-  });
-
-const renderPresents = presents =>
-  presents.map(present => {
-    $.save();
-    $.translate(present.x, present.y);
-    if(present.image instanceof Image) {
-      $.drawImage(present.image, 0, 0);
-    }
-    $.restore();
-  });
-
-const updatePresents = presents =>
-  presents.map((present, index) => {
-    present.vy += GRAVITY;
-
-    present.y += present.vy;
-    present.x += present.vx;
-
-    if (!inScreen(present)) {
-      presents[index] = PresentFactory.randomPresent();
-    }
-  });
-
-const drawFrame = () => {
-  requestAnimationFrame(drawFrame);
-  $.clearRect(0, 0, w, h);
-
-  updateSnow(snow);
-  renderSnow(snow);
-  updatePresents(presents);
-  renderPresents(presents);
-};
-
-const init = () => {
-  document.body.appendChild($.canvas);
-
-  for (let i = 20; i > 0; i--) {
-    snow.push(SnowFlakeFactory.randomSnowFlake());
-  }
-
-  for (let i = 0; i < presentLimit; i++) {
-    presents.push(PresentFactory.randomPresent());
-  }
-
-  const addSnow = setInterval(() => {
-    if (snow.length < limit) {
-      snow.push(SnowFlakeFactory.randomSnowFlake());
-    } else {
-      clearInterval(addSnow);
-    }
-  }, 500);
-
-  const addPresent = setInterval(() => {
-    if (presents.length < presentLimit) {
-      presents.push(PresentFactory.randomPresent());
-    } else {
-      clearInterval(addPresent);
-    }
-  }, 500);
-
-  drawFrame();
-};
-
-class SnowFlakeFactory {
-  static create(options = {}, id = Math.random()) {
-    return Object.assign(new SnowFlake(), options);
-  }
-
-  static randomSnowFlake() {
-    return SnowFlakeFactory.create({
-      x: randomInt(0, w),
-      y: randomInt(0, h / 2),
-      vy: randomInt(0.5, 1.5),
-      vx: randomInt(-0.5, 0.5),
-      alpha: 0.1,
-      type: Math.random() > 0.1 ? 1 : 2,
-      dir: Math.random() > 0.5
-    });
-  }
 }
 
-class SnowFlake {
-  constructor() {
-    this.x = 0;
-    this.y = 0;
-    this.vy = 0;
-    this.vx = 0;
-    this.angle = 0;
-    this.alpha = 0;
-    this.dir = false;
+//#endregion
 
-    this.type = 1;
-
-    this.fade = 'in';
-    this.fadeIn = 0.003;
-    this.fadeOut = 0.008;
-  }
-
-  updateAlpha() {
-    if (this.alpha > 0.8) {
-      this.fade = 'out';
-    }
-
-    if (this.fade === 'out') {
-      this.alpha -= this.fadeOut;
-    } else if (this.fade === 'in') {
-      this.alpha += this.fadeIn;
-    }
-  }
+//#region render
+const img = new Image()
+img.src = './santa.png'
+function renderRectAsSanta(ctx, rect) {
+    ctx.save()
+    ctx.translate(rect.x, rect.y)
+    ctx.drawImage(img, 0, 0, rect.width, rect.height)
+    ctx.restore()
 }
 
-class PresentFactory {
-  static create(options = {}, id = Math.random()) {
-    return Object.assign(new Present(), options);
-  }
+function renderRectAsPresent(ctx, rect) {
+    ctx.save()
+    ctx.translate(rect.x, rect.y)
+    ctx.drawImage(rect.img, 0, 0, rect.width, rect.height)
+    ctx.restore()
+}
+//#endregion
 
-  static randomPresent() {
-    return PresentFactory.create({
-      image: sample(presentImages),
-      x: w / 2 - 150,
-      y: h / 2 - 120,
-      vx: randomInt(-6, 0),
-      vy: randomInt(-4, 4)
-    });
-  }
+//#region update
+function updateSanta(screen, santa) {
+    if (KEYS['w'] || KEYS['ArrowUp']) santa.vy = -santa.speed
+    if (KEYS['s'] || KEYS['ArrowDown']) santa.vy = santa.speed
+    if (KEYS['a'] || KEYS['ArrowLeft']) santa.vx = -santa.speed
+    if (KEYS['d'] || KEYS['ArrowRight']) santa.vx = santa.speed
+
+    santa.x += santa.vx
+    santa.y += santa.vy
+
+    if (santa.vx) santa.vx *= FRICTION
+    if (santa.vy) santa.vy *= FRICTION
+
+    santa.x = clampNumber(santa.x, 0, screen.width - santa.width)
+    santa.y = clampNumber(santa.y, 0, screen.height - santa.height)
+}
+//#endregion
+
+//#region gameLoop
+function gameLoop(ctx, screen) {
+    requestAnimationFrame(gameLoop.bind(null, ctx, screen))
+
+    ctx.clearRect(0, 0, screen.width, screen.height)
+
+    updateSanta(screen, SANTA)
+    renderRectAsSanta(ctx, SANTA)
+
+    PRESENTS.forEach(rect => {
+        rect.x -= 4
+
+        if (collisionDetected(rect, SANTA) || !rectInScreen(SCREEN, rect)) {
+            Object.assign(rect, getPresent())
+        }
+    })
+    PRESENTS.forEach(rect => {
+        if (rectInScreen(SCREEN, rect)) renderRectAsPresent(ctx, rect)
+    })
 }
 
-class Present {
-  constructor() {
-    this.image = undefined;
-    this.x = 0;
-    this.y = 0;
-    this.vy = 0;
-    this.vx = 0;
-    this.rotation = 0;
-    this.vr = 0.05;
-    this.image = undefined;
-  }
-}
+generatePresents()
+gameLoop(CTX, SCREEN)
+//#endregion
